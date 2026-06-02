@@ -26,6 +26,13 @@ export interface GameState {
   phase: 'menu' | 'playing' | 'gameover'
 }
 
+export interface TongueSegment {
+  x: number
+  y: number
+  vx: number
+  vy: number
+}
+
 export interface TongueState {
   active: boolean
   angle: number
@@ -35,6 +42,8 @@ export interface TongueState {
   retracting: boolean
   targetX: number
   targetY: number
+  segments: TongueSegment[]
+  time: number
 }
 
 export interface AnteaterPos {

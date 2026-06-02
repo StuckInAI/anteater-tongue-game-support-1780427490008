@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef } from 'react'
-import { Bug, ScorePopup, GameState, TongueState, AnteaterPos } from '@/types/game'
+import { Bug, ScorePopup, GameState, TongueState, TongueSegment, AnteaterPos } from '@/types/game'
 import { useGameLoop } from './useGameLoop'
 
 const BUG_TYPES: Bug['type'][] = ['ant', 'beetle', 'fly', 'spider']
@@ -12,6 +12,10 @@ let nextPopupId = 1
 const TONGUE_SPEED = 600
 const TONGUE_MAX_LENGTH = 350
 const TONGUE_THICKNESS = 12
+const TONGUE_SEGMENT_COUNT = 20
+const TONGUE_WAVE_AMPLITUDE = 18
+const TONGUE_WAVE_FREQUENCY = 4.5
+const TONGUE_WAVE_SPEED = 12
 
 function randomBug(level: number, canvasW: number, canvasH: number): Bug {
   const type = BUG_TYPES[Math.floor(Math.random() * BUG_TYPES.length)]
@@ -33,6 +37,47 @@ function randomBug(level: number, canvasW: number, canvasH: number): Bug {
   }
 }
 
+function buildTongueSegments(ax: number, ay: number, angle: number, length: number, time: number): TongueSegment[] {
+  const segments: TongueSegment[] = []
+  const perpX = -Math.sin(angle)
+  const perpY = Math.cos(angle)
+
+  for (let i = 0; i <= TONGUE_SEGMENT_COUNT; i++) {
+    const t = i / TONGUE_SEGMENT_COUNT
+    const dist = t * length
+
+    // Wave gets stronger toward tip, zero at base
+    const waveEnvelope = Math.pow(t, 1.5)
+    // Traveling wave that moves outward
+    const wave = Math.sin(t * TONGUE_WAVE_FREQUENCY * Math.PI - time * TONGUE_WAVE_SPEED) * TONGUE_WAVE_AMPLITUDE * waveEnvelope
+    // Add a secondary smaller, faster wave for organic feel
+    const wave2 = Math.sin(t * TONGUE_WAVE_FREQUENCY * 2.3 * Math.PI - time * TONGUE_WAVE_SPEED * 1.7 + 1.3) * TONGUE_WAVE_AMPLITUDE * 0.3 * waveEnvelope
+
+    const totalWave = wave + wave2
+
+    const sx = ax + Math.cos(angle) * dist + perpX * totalWave
+    const sy = ay + Math.sin(angle) * dist + perpY * totalWave
+
+    segments.push({ x: sx, y: sy, vx: perpX * totalWave, vy: perpY * totalWave })
+  }
+  return segments
+}
+
+function defaultTongue(): TongueState {
+  return {
+    active: false,
+    angle: 0,
+    length: 0,
+    maxLength: TONGUE_MAX_LENGTH,
+    extending: false,
+    retracting: false,
+    targetX: 0,
+    targetY: 0,
+    segments: [],
+    time: 0,
+  }
+}
+
 export function useAnteaterGame(canvasWidth: number, canvasHeight: number) {
   const [gameState, setGameState] = useState<GameState>(() => ({
     score: 0,
@@ -44,16 +89,7 @@ export function useAnteaterGame(canvasWidth: number, canvasHeight: number) {
 
   const [bugs, setBugs] = useState<Bug[]>([])
   const [popups, setPopups] = useState<ScorePopup[]>([])
-  const [tongue, setTongue] = useState<TongueState>({
-    active: false,
-    angle: 0,
-    length: 0,
-    maxLength: TONGUE_MAX_LENGTH,
-    extending: false,
-    retracting: false,
-    targetX: 0,
-    targetY: 0,
-  })
+  const [tongue, setTongue] = useState<TongueState>(defaultTongue)
   const [anteater, setAnteater] = useState<AnteaterPos>({
     x: canvasWidth / 2,
     y: canvasHeight * 0.75,
@@ -67,6 +103,7 @@ export function useAnteaterGame(canvasWidth: number, canvasHeight: number) {
   const popupsRef = useRef(popups)
   const spawnTimerRef = useRef<number>(0)
   const levelTimerRef = useRef<number>(0)
+  const tongueTimeRef = useRef<number>(0)
 
   stateRef.current = gameState
   bugsRef.current = bugs
@@ -77,6 +114,7 @@ export function useAnteaterGame(canvasWidth: number, canvasHeight: number) {
   const fireTongue = useCallback((targetX: number, targetY: number) => {
     const at = anteaterRef.current
     const angle = Math.atan2(targetY - at.y, targetX - at.x)
+    tongueTimeRef.current = 0
     setTongue({
       active: true,
       angle,
@@ -86,6 +124,8 @@ export function useAnteaterGame(canvasWidth: number, canvasHeight: number) {
       retracting: false,
       targetX,
       targetY,
+      segments: [],
+      time: 0,
     })
     setAnteater(prev => ({ ...prev, facingRight: targetX >= prev.x }))
   }, [])
@@ -95,9 +135,10 @@ export function useAnteaterGame(canvasWidth: number, canvasHeight: number) {
     nextPopupId = 1
     spawnTimerRef.current = 0
     levelTimerRef.current = 0
+    tongueTimeRef.current = 0
     setBugs([])
     setPopups([])
-    setTongue({ active: false, angle: 0, length: 0, maxLength: TONGUE_MAX_LENGTH, extending: false, retracting: false, targetX: 0, targetY: 0 })
+    setTongue(defaultTongue())
     setAnteater({ x: canvasWidth / 2, y: canvasHeight * 0.75, facingRight: true })
     setGameState(prev => ({
       ...prev,
@@ -140,13 +181,11 @@ export function useAnteaterGame(canvasWidth: number, canvasHeight: number) {
         if (bug.eaten || bug.splat) return bug
         const newX = bug.x + bug.direction * bug.speed * dt
         const newWiggle = bug.wiggle + dt * 5
-        // Check if bug reached anteater (missed)
         const dist = Math.hypot(newX - at.x, bug.y - at.y)
         if (dist < 40) {
           livesLost++
           return { ...bug, splat: true, x: newX, wiggle: newWiggle }
         }
-        // Remove if off screen
         if (newX < -80 || newX > canvasWidth + 80) {
           return { ...bug, eaten: true }
         }
@@ -169,15 +208,22 @@ export function useAnteaterGame(canvasWidth: number, canvasHeight: number) {
     // Move tongue
     const t = tongueRef.current
     if (t.active) {
+      tongueTimeRef.current += dt
+      const currentTime = tongueTimeRef.current
+
       if (t.extending) {
         const newLen = t.length + TONGUE_SPEED * dt
         if (newLen >= t.maxLength) {
-          setTongue(prev => ({ ...prev, length: t.maxLength, extending: false, retracting: true }))
+          const segs = buildTongueSegments(anteaterRef.current.x, anteaterRef.current.y, t.angle, t.maxLength, currentTime)
+          setTongue(prev => ({ ...prev, length: t.maxLength, extending: false, retracting: true, segments: segs, time: currentTime }))
         } else {
           // Check tongue tip vs bugs
           const at2 = anteaterRef.current
-          const tipX = at2.x + Math.cos(t.angle) * newLen
-          const tipY = at2.y + Math.sin(t.angle) * newLen
+          const segs = buildTongueSegments(at2.x, at2.y, t.angle, newLen, currentTime)
+          const tipSeg = segs[segs.length - 1]
+          const tipX = tipSeg.x
+          const tipY = tipSeg.y
+
           setBugs(prev => {
             let scoreGained = 0
             const newPopups: ScorePopup[] = []
@@ -200,19 +246,21 @@ export function useAnteaterGame(canvasWidth: number, canvasHeight: number) {
               setTimeout(() => {
                 setPopups(prev2 => prev2.filter(p => !newPopups.find(np => np.id === p.id)))
               }, 800)
-              setTongue(prev => ({ ...prev, length: newLen, extending: false, retracting: true }))
+              setTongue(prev => ({ ...prev, length: newLen, extending: false, retracting: true, segments: segs, time: currentTime }))
               return updated
             }
             return updated
           })
-          setTongue(prev => ({ ...prev, length: newLen }))
+          setTongue(prev => ({ ...prev, length: newLen, segments: segs, time: currentTime }))
         }
       } else if (t.retracting) {
         const newLen = t.length - TONGUE_SPEED * 1.5 * dt
         if (newLen <= 0) {
-          setTongue({ active: false, angle: 0, length: 0, maxLength: TONGUE_MAX_LENGTH, extending: false, retracting: false, targetX: 0, targetY: 0 })
+          setTongue(defaultTongue())
         } else {
-          setTongue(prev => ({ ...prev, length: newLen }))
+          const at2 = anteaterRef.current
+          const segs = buildTongueSegments(at2.x, at2.y, t.angle, newLen, currentTime)
+          setTongue(prev => ({ ...prev, length: newLen, segments: segs, time: currentTime }))
         }
       }
     }

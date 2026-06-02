@@ -58,7 +58,6 @@ export default function GameCanvas({ width, height, bugs, tongue, anteater, popu
     ctx.fillStyle = groundGrad
     ctx.beginPath()
     ctx.moveTo(0, groundY)
-    // Wavy ground
     for (let x = 0; x <= width; x += 40) {
       const wave = Math.sin(x * 0.02) * 8
       ctx.lineTo(x, groundY + wave)
@@ -84,28 +83,117 @@ export default function GameCanvas({ width, height, bugs, tongue, anteater, popu
       ctx.stroke()
     }
 
-    // Tongue
-    if (tongue.active && tongue.length > 0) {
-      const tipX = anteater.x + Math.cos(tongue.angle) * tongue.length
-      const tipY = anteater.y + Math.sin(tongue.angle) * tongue.length
-
+    // Tongue - dynamic curved rendering
+    if (tongue.active && tongue.length > 0 && tongue.segments.length > 1) {
       ctx.save()
-      // Tongue body
+
+      const segs = tongue.segments
+
+      // Glow layer
+      ctx.shadowColor = '#ff6bcb'
+      ctx.shadowBlur = 20
+
+      // Draw thick tongue body as smooth curve
       ctx.beginPath()
-      ctx.moveTo(anteater.x, anteater.y - 5)
-      ctx.lineTo(tipX, tipY)
+      ctx.moveTo(segs[0].x, segs[0].y)
+      for (let i = 1; i < segs.length - 1; i++) {
+        const xc = (segs[i].x + segs[i + 1].x) / 2
+        const yc = (segs[i].y + segs[i + 1].y) / 2
+        ctx.quadraticCurveTo(segs[i].x, segs[i].y, xc, yc)
+      }
+      const last = segs[segs.length - 1]
+      ctx.lineTo(last.x, last.y)
+      ctx.strokeStyle = '#cc1570'
+      ctx.lineWidth = tongueThickness + 4
+      ctx.lineCap = 'round'
+      ctx.lineJoin = 'round'
+      ctx.stroke()
+
+      // Inner tongue (brighter)
+      ctx.shadowBlur = 0
+      ctx.beginPath()
+      ctx.moveTo(segs[0].x, segs[0].y)
+      for (let i = 1; i < segs.length - 1; i++) {
+        const xc = (segs[i].x + segs[i + 1].x) / 2
+        const yc = (segs[i].y + segs[i + 1].y) / 2
+        ctx.quadraticCurveTo(segs[i].x, segs[i].y, xc, yc)
+      }
+      ctx.lineTo(last.x, last.y)
       ctx.strokeStyle = '#e91e8c'
       ctx.lineWidth = tongueThickness
       ctx.lineCap = 'round'
-      ctx.shadowColor = '#ff6bcb'
-      ctx.shadowBlur = 15
+      ctx.lineJoin = 'round'
       ctx.stroke()
 
-      // Tongue tip
+      // Highlight/sheen along the tongue
       ctx.beginPath()
-      ctx.arc(tipX, tipY, tongueThickness / 1.5, 0, Math.PI * 2)
+      ctx.moveTo(segs[0].x, segs[0].y)
+      for (let i = 1; i < segs.length - 1; i++) {
+        const xc = (segs[i].x + segs[i + 1].x) / 2
+        const yc = (segs[i].y + segs[i + 1].y) / 2
+        ctx.quadraticCurveTo(segs[i].x, segs[i].y, xc, yc)
+      }
+      ctx.lineTo(last.x, last.y)
+      ctx.strokeStyle = 'rgba(255, 150, 210, 0.4)'
+      ctx.lineWidth = tongueThickness * 0.4
+      ctx.lineCap = 'round'
+      ctx.lineJoin = 'round'
+      ctx.stroke()
+
+      // Tongue tip - bulbous end
+      const tipX = last.x
+      const tipY = last.y
+      ctx.beginPath()
+      ctx.arc(tipX, tipY, tongueThickness * 0.9, 0, Math.PI * 2)
       ctx.fillStyle = '#ff1493'
+      ctx.shadowColor = '#ff6bcb'
+      ctx.shadowBlur = 12
       ctx.fill()
+
+      // Forked tip effect
+      if (segs.length >= 2) {
+        const prev = segs[segs.length - 2]
+        const dx = last.x - prev.x
+        const dy = last.y - prev.y
+        const tipAngle = Math.atan2(dy, dx)
+        const forkLen = 8
+        const forkSpread = 0.5
+
+        ctx.beginPath()
+        ctx.moveTo(tipX, tipY)
+        ctx.lineTo(
+          tipX + Math.cos(tipAngle - forkSpread) * forkLen,
+          tipY + Math.sin(tipAngle - forkSpread) * forkLen
+        )
+        ctx.strokeStyle = '#ff1493'
+        ctx.lineWidth = 3
+        ctx.lineCap = 'round'
+        ctx.shadowBlur = 0
+        ctx.stroke()
+
+        ctx.beginPath()
+        ctx.moveTo(tipX, tipY)
+        ctx.lineTo(
+          tipX + Math.cos(tipAngle + forkSpread) * forkLen,
+          tipY + Math.sin(tipAngle + forkSpread) * forkLen
+        )
+        ctx.strokeStyle = '#ff1493'
+        ctx.lineWidth = 3
+        ctx.lineCap = 'round'
+        ctx.stroke()
+      }
+
+      // Saliva droplets along tongue
+      for (let i = 3; i < segs.length; i += 4) {
+        const seg = segs[i]
+        const dropSize = 2 + Math.sin(tongue.time * 8 + i) * 1
+        ctx.beginPath()
+        ctx.arc(seg.x + seg.vx * 0.5, seg.y + seg.vy * 0.5, Math.max(0.5, dropSize), 0, Math.PI * 2)
+        ctx.fillStyle = 'rgba(255, 200, 230, 0.5)'
+        ctx.shadowBlur = 0
+        ctx.fill()
+      }
+
       ctx.restore()
     }
 
