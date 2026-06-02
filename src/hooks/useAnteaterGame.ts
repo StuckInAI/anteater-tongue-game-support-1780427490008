@@ -34,13 +34,13 @@ function randomBug(level: number, canvasW: number, canvasH: number): Bug {
 }
 
 export function useAnteaterGame(canvasWidth: number, canvasHeight: number) {
-  const [gameState, setGameState] = useState<GameState>({
+  const [gameState, setGameState] = useState<GameState>(() => ({
     score: 0,
-    highScore: parseInt(localStorage.getItem('anteater_hs') || '0'),
+    highScore: parseInt(localStorage.getItem('anteater_hs') || '0', 10),
     lives: 3,
     level: 1,
     phase: 'menu',
-  })
+  }))
 
   const [bugs, setBugs] = useState<Bug[]>([])
   const [popups, setPopups] = useState<ScorePopup[]>([])
@@ -65,8 +65,8 @@ export function useAnteaterGame(canvasWidth: number, canvasHeight: number) {
   const tongueRef = useRef(tongue)
   const anteaterRef = useRef(anteater)
   const popupsRef = useRef(popups)
-  const spawnTimerRef = useRef(0)
-  const levelTimerRef = useRef(0)
+  const spawnTimerRef = useRef<number>(0)
+  const levelTimerRef = useRef<number>(0)
 
   stateRef.current = gameState
   bugsRef.current = bugs
@@ -121,7 +121,7 @@ export function useAnteaterGame(canvasWidth: number, canvasHeight: number) {
       const maxBugs = 3 + gs.level
       if (count < maxBugs) {
         const newBug = randomBug(gs.level, canvasWidth, canvasHeight)
-        setBugs(prev => [...prev.filter(b => !b.splat || b.splat), newBug])
+        setBugs(prev => [...prev, newBug])
       }
     }
 
@@ -180,7 +180,7 @@ export function useAnteaterGame(canvasWidth: number, canvasHeight: number) {
           const tipY = at2.y + Math.sin(t.angle) * newLen
           setBugs(prev => {
             let scoreGained = 0
-            let newPopups: ScorePopup[] = []
+            const newPopups: ScorePopup[] = []
             const updated = prev.map(bug => {
               if (bug.eaten || bug.splat) return bug
               const dist = Math.hypot(tipX - bug.x, tipY - bug.y)
@@ -218,7 +218,7 @@ export function useAnteaterGame(canvasWidth: number, canvasHeight: number) {
     }
 
     // Cleanup old bugs
-    setBugs(prev => prev.filter(b => !(b.eaten && !b.splat) || b.splat))
+    setBugs(prev => prev.filter(b => !(b.eaten && !b.splat)))
   }, [canvasWidth, canvasHeight])
 
   useGameLoop(tick, gameState.phase === 'playing')

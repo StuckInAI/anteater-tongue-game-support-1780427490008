@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
 
-export function useGameLoop(callback: (dt: number) => void, active: boolean) {
-  const callbackRef = useRef(callback)
+export function useGameLoop(callback: (dt: number) => void, active: boolean): void {
+  const callbackRef = useRef<(dt: number) => void>(callback)
   const rafRef = useRef<number>(0)
   const lastTimeRef = useRef<number>(0)
 
@@ -12,7 +12,7 @@ export function useGameLoop(callback: (dt: number) => void, active: boolean) {
   useEffect(() => {
     if (!active) return
 
-    const loop = (time: number) => {
+    const loop = (time: number): void => {
       const dt = lastTimeRef.current ? Math.min((time - lastTimeRef.current) / 1000, 0.05) : 0.016
       lastTimeRef.current = time
       callbackRef.current(dt)

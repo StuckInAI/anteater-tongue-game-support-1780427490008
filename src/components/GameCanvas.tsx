@@ -138,7 +138,7 @@ export default function GameCanvas({ width, height, bugs, tongue, anteater, popu
     })
 
     // Anteater
-    drawAnteater(ctx, anteater, tongue)
+    drawAnteater(ctx, anteater)
 
     // Score popups
     popups.forEach(popup => {
@@ -160,12 +160,12 @@ export default function GameCanvas({ width, height, bugs, tongue, anteater, popu
       ref={canvasRef}
       width={width}
       height={height}
-      className="absolute inset-0"
+      className="absolute inset-0 w-full h-full"
     />
   )
 }
 
-function drawAnteater(ctx: CanvasRenderingContext2D, anteater: AnteaterPos, tongue: TongueState) {
+function drawAnteater(ctx: CanvasRenderingContext2D, anteater: AnteaterPos) {
   ctx.save()
   ctx.translate(anteater.x, anteater.y)
   if (!anteater.facingRight) ctx.scale(-1, 1)
