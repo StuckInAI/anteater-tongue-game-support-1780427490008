@@ -429,15 +429,6 @@ export default function Game() {
         }
 
         // Remove bugs that have passed the anteater
-        const beforeLen = s.bugs.length
-        s.bugs = s.bugs.filter(b => {
-          if (!b.eaten && b.x < ANTEATER_X - 60) return false
-          return true
-        })
-        const escaped = beforeLen - s.bugs.filter(b => !b.eaten || b.eaten).length
-        // Count escapes properly
-        const escapedCount = s.bugs.filter(b => !b.eaten && b.x < ANTEATER_X - 60).length
-        // Remove escaped bugs and subtract lives
         const newBugs: Bug[] = []
         let lostLives = 0
         for (const b of s.bugs) {
@@ -447,10 +438,7 @@ export default function Game() {
             newBugs.push(b)
           }
         }
-        // Remove eaten bugs after a delay — just remove immediately
-        s.bugs = newBugs.filter(b => b.x > -40 || b.eaten === false)
-        // Actually simplify: remove bugs that are far left
-        s.bugs = s.bugs.filter(b => b.x > -50)
+        s.bugs = newBugs.filter(b => b.x > -50)
 
         if (lostLives > 0) {
           s.lives = Math.max(0, s.lives - lostLives)
